@@ -20,4 +20,9 @@ movil mediante un cable USB con adaptador OTG.
 
 - v1.0:
 -  - Primera version: deteccion USB + modo prueba + generador PCL + boton de prueba (removido en la version final)
+
+-v1.5:
+-  -Procesadores de documentos: PDF, imágenes y HTML
+Selector de archivos integrado en la pantalla de impresión
+Exportación a archivo .prn
   
