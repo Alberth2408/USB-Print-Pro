@@ -16,7 +16,7 @@ class PrinterSimulation : PrinterOutput {
     fun getData(): ByteArray = writtenData.toByteArray()
 
     fun getHexDump(): String {
-        return getData()
+        return writtenData
             .chunked(16)
             .joinToString("\n") { chunk ->
                 chunk.joinToString(" ") { byte ->

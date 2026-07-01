@@ -1,5 +1,8 @@
 package com.usbprintpro.ui.screens
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -9,9 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -32,6 +33,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -43,11 +45,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.usbprintpro.domain.model.Orientation
 import com.usbprintpro.domain.model.PaperSize
+import com.usbprintpro.ui.viewmodel.DocumentType
 import com.usbprintpro.ui.viewmodel.PrintViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -56,13 +58,27 @@ fun PrintScreen(
     onBack: () -> Unit,
     viewModel: PrintViewModel = hiltViewModel()
 ) {
+    val docType by viewModel.docType.collectAsState()
     val text by viewModel.text.collectAsState()
+    val fileName by viewModel.fileName.collectAsState()
     val settings by viewModel.settings.collectAsState()
     val hexPreview by viewModel.hexPreview.collectAsState()
     val status by viewModel.status.collectAsState()
     val exportPath by viewModel.exportPath.collectAsState()
 
     val snackbarHostState = remember { SnackbarHostState() }
+
+    val pdfPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? -> uri?.let { viewModel.processPDF(it) } }
+
+    val imagePicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? -> uri?.let { viewModel.processImage(it) } }
+
+    val htmlPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? -> uri?.let { viewModel.processHTML(it) } }
 
     LaunchedEffect(exportPath) {
         exportPath?.let {
@@ -98,8 +114,24 @@ fun PrintScreen(
                 .padding(padding)
                 .padding(16.dp)
                 .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            DocumentTypeBar(docType = docType)
+
+            FilePickerButtons(
+                onPickPDF = { pdfPicker.launch(arrayOf("application/pdf")) },
+                onPickImage = { imagePicker.launch(arrayOf("image/*")) },
+                onPickHTML = { htmlPicker.launch(arrayOf("text/html")) }
+            )
+
+            fileName?.let {
+                Text(
+                    text = "Archivo: $it",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+
             Text(
                 text = "Texto a imprimir:",
                 style = MaterialTheme.typography.titleMedium
@@ -111,12 +143,12 @@ fun PrintScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(120.dp),
-                placeholder = { Text("Escribe aquí el texto...") },
+                placeholder = { Text("Escribe aqui el texto...") },
                 maxLines = 5
             )
 
             Text(
-                text = "Configuración:",
+                text = "Configuracion:",
                 style = MaterialTheme.typography.titleMedium
             )
 
@@ -137,14 +169,14 @@ fun PrintScreen(
                     onClick = { viewModel.testPrint() },
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text("🧪 Probar (sin USB)")
+                    Text("Probar (sin USB)")
                 }
 
                 Button(
                     onClick = { viewModel.exportToFile() },
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text("💾 Exportar .prn")
+                    Text("Exportar .prn")
                 }
             }
 
@@ -153,6 +185,43 @@ fun PrintScreen(
             }
 
             StatusCard(status = status)
+        }
+    }
+}
+
+@Composable
+private fun DocumentTypeBar(docType: DocumentType) {
+    val label = when (docType) {
+        is DocumentType.Text -> "Texto"
+        is DocumentType.PDF -> "PDF"
+        is DocumentType.Image -> "Imagen"
+        is DocumentType.HTML -> "HTML"
+    }
+    Text(
+        text = "Tipo: $label",
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary
+    )
+}
+
+@Composable
+private fun FilePickerButtons(
+    onPickPDF: () -> Unit,
+    onPickImage: () -> Unit,
+    onPickHTML: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        TextButton(onClick = onPickPDF, modifier = Modifier.weight(1f)) {
+            Text("PDF", maxLines = 1)
+        }
+        TextButton(onClick = onPickImage, modifier = Modifier.weight(1f)) {
+            Text("Imagen", maxLines = 1)
+        }
+        TextButton(onClick = onPickHTML, modifier = Modifier.weight(1f)) {
+            Text("HTML", maxLines = 1)
         }
     }
 }
@@ -178,7 +247,7 @@ private fun SettingsSection(
         ) {
             CopiesRow(copies = copies, onCopiesChange = onCopiesChange)
             DropdownRow(
-                label = "Orientación",
+                label = "Orientacion",
                 selected = orientation.label,
                 items = Orientation.entries.map { it.label to it },
                 onSelect = onOrientationChange

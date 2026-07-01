@@ -2,6 +2,7 @@ package com.usbprintpro.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -85,7 +86,7 @@ fun HomeScreen(
 }
 
 @Composable
-private fun EmptyState(
+private fun ColumnScope.EmptyState(
     isScanning: Boolean,
     status: String,
     onSearch: () -> Unit,
@@ -161,7 +162,7 @@ private fun EmptyState(
 }
 
 @Composable
-private fun PrinterList(
+private fun ColumnScope.PrinterList(
     printers: List<USBPrinter>,
     status: String,
     onSearch: () -> Unit,
