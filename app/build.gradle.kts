@@ -43,7 +43,14 @@ android {
 
     packaging {
         resources {
-            excludes += "/META-INF/native-image/**"
+            excludes += listOf(
+                "/META-INF/DEPENDENCIES",
+                "/META-INF/LICENSE",
+                "/META-INF/LICENSE.md",
+                "/META-INF/NOTICE",
+                "/META-INF/NOTICE.md",
+                "/META-INF/native-image/**"
+            )
         }
     }
 }
@@ -70,6 +77,10 @@ dependencies {
 
     // iText (PDF processing)
     implementation("com.itextpdf:itext7-core:8.0.4")
+
+    // Apache POI (Word full format)
+    implementation("org.apache.poi:poi-ooxml:5.3.0")
+    implementation("org.apache.poi:poi-scratchpad:5.3.0")
 
     // Coil (image loading)
     implementation("io.coil-kt:coil-compose:2.6.0")

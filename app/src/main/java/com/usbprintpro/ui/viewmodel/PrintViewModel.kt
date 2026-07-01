@@ -7,8 +7,11 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.usbprintpro.data.document.HTMLProcessor
 import com.usbprintpro.data.document.ImageProcessor
+import com.usbprintpro.data.document.PDFGenerator
 import com.usbprintpro.data.document.PDFProcessor
+import com.usbprintpro.data.document.WordProcessorV2
 import com.usbprintpro.data.printer.PCLGenerator
+import com.usbprintpro.data.printer.PCLRasterizer
 import com.usbprintpro.data.printer.PrinterOutput
 import com.usbprintpro.data.usb.PrinterSimulation
 import com.usbprintpro.domain.model.Orientation
@@ -28,6 +31,7 @@ sealed class DocumentType {
     data object PDF : DocumentType()
     data object Image : DocumentType()
     data object HTML : DocumentType()
+    data class Word(val hasFormatting: Boolean = false) : DocumentType()
 }
 
 @HiltViewModel
@@ -36,7 +40,10 @@ class PrintViewModel @Inject constructor(
     private val pclGenerator: PCLGenerator,
     private val pdfProcessor: PDFProcessor,
     private val imageProcessor: ImageProcessor,
-    private val htmlProcessor: HTMLProcessor
+    private val htmlProcessor: HTMLProcessor,
+    private val wordProcessorV2: WordProcessorV2,
+    private val pdfGenerator: PDFGenerator,
+    private val pclRasterizer: PCLRasterizer
 ) : AndroidViewModel(application) {
 
     private val _docType = MutableStateFlow<DocumentType>(DocumentType.Text)
@@ -60,6 +67,9 @@ class PrintViewModel @Inject constructor(
     private val _exportPath = MutableStateFlow<String?>(null)
     val exportPath: StateFlow<String?> = _exportPath.asStateFlow()
 
+    private val _pdfBytes = MutableStateFlow<ByteArray?>(null)
+    val pdfBytes: StateFlow<ByteArray?> = _pdfBytes.asStateFlow()
+
     private var output: PrinterOutput = PrinterSimulation()
 
     fun processPDF(uri: Uri) {
@@ -74,6 +84,7 @@ class PrintViewModel @Inject constructor(
                     _text.value = extractedText
                     _docType.value = DocumentType.PDF
                     _fileName.value = uri.lastPathSegment
+                    _pdfBytes.value = null
                     _status.value = "PDF cargado (${bytes.size / 1024} KB)"
                 },
                 onFailure = { e ->
@@ -104,6 +115,7 @@ class PrintViewModel @Inject constructor(
             _text.value = "[Imagen procesada - ${rasterData.size} bytes PCL]"
             _docType.value = DocumentType.Image
             _fileName.value = uri.lastPathSegment
+            _pdfBytes.value = null
 
             val sim = PrinterSimulation()
             sim.write(pclData)
@@ -123,7 +135,66 @@ class PrintViewModel @Inject constructor(
             _text.value = plainText
             _docType.value = DocumentType.HTML
             _fileName.value = uri.lastPathSegment
+            _pdfBytes.value = null
             _status.value = "HTML cargado (${plainText.length} caracteres)"
+        }
+    }
+
+    fun processWord(uri: Uri) {
+        viewModelScope.launch {
+            _status.value = "Procesando documento Word..."
+            val bytes = readBytes(uri) ?: run {
+                _status.value = "Error al leer el archivo Word"
+                return@launch
+            }
+
+            wordProcessorV2.extractStyledDocument(bytes).fold(
+                onSuccess = { styledDoc ->
+                    val runs = styledDoc.elements.flatMap { element ->
+                        when (element) {
+                            is com.usbprintpro.domain.model.StyledElement.Paragraph ->
+                                element.runs.map { it.text }
+                            else -> emptyList()
+                        }
+                    }
+                    _text.value = runs.joinToString("\n")
+
+                    pdfGenerator.generate(styledDoc).fold(
+                        onSuccess = { outputBytes ->
+                            _pdfBytes.value = outputBytes
+                            _docType.value = DocumentType.Word(hasFormatting = true)
+                            _fileName.value = uri.lastPathSegment
+                            _status.value = "Word con formato cargado (PDF: ${outputBytes.size / 1024} KB)"
+                        },
+                        onFailure = { e ->
+                            _docType.value = DocumentType.Word(hasFormatting = false)
+                            _fileName.value = uri.lastPathSegment
+                            _status.value = "Word cargado (solo texto, error PDF: ${e.message})"
+                        }
+                    )
+                },
+                onFailure = { e ->
+                    processWordLegacy(bytes, uri)
+                }
+            )
+        }
+    }
+
+    private fun processWordLegacy(bytes: ByteArray, uri: Uri) {
+        viewModelScope.launch {
+            val text = try {
+                val doc = org.apache.poi.hwpf.HWPFDocument(java.io.ByteArrayInputStream(bytes))
+                val extractor = org.apache.poi.hwpf.extractor.WordExtractor(doc)
+                extractor.text.trim()
+            } catch (e: Exception) {
+                _status.value = "Error al procesar Word: ${e.message}"
+                return@launch
+            }
+            _text.value = text
+            _docType.value = DocumentType.Word(hasFormatting = false)
+            _fileName.value = uri.lastPathSegment
+            _pdfBytes.value = null
+            _status.value = "Word (.doc antiguo) cargado (${text.length} caracteres)"
         }
     }
 
@@ -132,6 +203,7 @@ class PrintViewModel @Inject constructor(
         if (_docType.value !is DocumentType.Text) {
             _docType.value = DocumentType.Text
             _fileName.value = null
+            _pdfBytes.value = null
         }
     }
 
@@ -173,6 +245,21 @@ class PrintViewModel @Inject constructor(
             FileOutputStream(file).use { it.write(data) }
             _exportPath.value = file.absolutePath
             _status.value = "Exportado a: ${file.name} (${data.size} bytes)"
+        }
+    }
+
+    fun exportPDF() {
+        viewModelScope.launch {
+            val pdfData = _pdfBytes.value ?: run {
+                _status.value = "No hay PDF generado"
+                return@launch
+            }
+            val dir = getApplication<Application>().getExternalFilesDir("prints")
+            dir?.mkdirs()
+            val file = File(dir, "document_${System.currentTimeMillis()}.pdf")
+            FileOutputStream(file).use { it.write(pdfData) }
+            _exportPath.value = file.absolutePath
+            _status.value = "PDF exportado a: ${file.name} (${pdfData.size / 1024} KB)"
         }
     }
 

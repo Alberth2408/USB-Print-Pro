@@ -65,6 +65,7 @@ fun PrintScreen(
     val hexPreview by viewModel.hexPreview.collectAsState()
     val status by viewModel.status.collectAsState()
     val exportPath by viewModel.exportPath.collectAsState()
+    val pdfBytes by viewModel.pdfBytes.collectAsState()
 
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -79,6 +80,10 @@ fun PrintScreen(
     val htmlPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri: Uri? -> uri?.let { viewModel.processHTML(it) } }
+
+    val wordPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? -> uri?.let { viewModel.processWord(it) } }
 
     LaunchedEffect(exportPath) {
         exportPath?.let {
@@ -121,7 +126,15 @@ fun PrintScreen(
             FilePickerButtons(
                 onPickPDF = { pdfPicker.launch(arrayOf("application/pdf")) },
                 onPickImage = { imagePicker.launch(arrayOf("image/*")) },
-                onPickHTML = { htmlPicker.launch(arrayOf("text/html")) }
+                onPickHTML = { htmlPicker.launch(arrayOf("text/html")) },
+                onPickWord = {
+                    wordPicker.launch(
+                        arrayOf(
+                            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                            "application/msword"
+                        )
+                    )
+                }
             )
 
             fileName?.let {
@@ -180,6 +193,15 @@ fun PrintScreen(
                 }
             }
 
+            if (pdfBytes != null) {
+                Button(
+                    onClick = { viewModel.exportPDF() },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Exportar PDF con formato original")
+                }
+            }
+
             if (hexPreview.isNotEmpty()) {
                 HexPreviewCard(hexDump = hexPreview)
             }
@@ -196,6 +218,7 @@ private fun DocumentTypeBar(docType: DocumentType) {
         is DocumentType.PDF -> "PDF"
         is DocumentType.Image -> "Imagen"
         is DocumentType.HTML -> "HTML"
+        is DocumentType.Word -> if (docType.hasFormatting) "Word (con formato)" else "Word (solo texto)"
     }
     Text(
         text = "Tipo: $label",
@@ -208,7 +231,8 @@ private fun DocumentTypeBar(docType: DocumentType) {
 private fun FilePickerButtons(
     onPickPDF: () -> Unit,
     onPickImage: () -> Unit,
-    onPickHTML: () -> Unit
+    onPickHTML: () -> Unit,
+    onPickWord: () -> Unit
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -222,6 +246,9 @@ private fun FilePickerButtons(
         }
         TextButton(onClick = onPickHTML, modifier = Modifier.weight(1f)) {
             Text("HTML", maxLines = 1)
+        }
+        TextButton(onClick = onPickWord, modifier = Modifier.weight(1f)) {
+            Text("Word", maxLines = 1)
         }
     }
 }
