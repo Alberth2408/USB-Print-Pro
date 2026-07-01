@@ -18,4 +18,6 @@ movil mediante un cable USB con adaptador OTG.
 
 ## Versiones
 
-- v1.0 - Primera version: deteccion USB + modo prueba + generador PCL
+- v1.0:
+-  - Primera version: deteccion USB + modo prueba + generador PCL + boton de prueba (removido en la version final)
+  
